@@ -1,5 +1,7 @@
 const User = require("../models/User");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const { generateOTP, otpExpiryTime } = require("../utils/otpUtils");
 const {
   createAccessToken,
   createRefreshToken,
@@ -147,3 +149,70 @@ exports.logout = async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 };
+
+exports.sendOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    let user = await User.findOne({ email });
+
+    // create user if not exists
+    if (!user) {
+      user = await User.create({ email });
+    }
+
+    const otp = generateOTP();
+
+    user.otp = {
+      code: otp,
+      expiresAt: otpExpiryTime(),
+    };
+
+    await user.save();
+
+    console.log("🔐 OTP for testing:", otp);
+
+    res.json({ message: "OTP sent to email (console for now)" });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+exports.verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ message: "User not found" });
+
+    if (!user.otp || user.otp.code !== otp)
+      return res.status(400).json({ message: "Invalid OTP" });
+
+    if (Date.now() > user.otp.expiresAt)
+      return res.status(400).json({ message: "OTP expired" });
+
+    // clear otp
+    user.otp = undefined;
+    await user.save();
+
+    // Create JWT token
+    const token = jwt.sign(
+      { id: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    res.json({
+      message: "OTP verified successfully",
+      token,
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+

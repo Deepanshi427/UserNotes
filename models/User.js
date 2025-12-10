@@ -8,6 +8,10 @@ const userSchema = new mongoose.Schema({
     refreshTokken:{
         type: String,
         default: null
+    },
+    otp: {
+    code: String,
+    expiresAt: Date,
     }
 });
 
